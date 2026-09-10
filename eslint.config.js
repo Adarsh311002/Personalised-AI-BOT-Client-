@@ -6,6 +6,15 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
   { ignores: ['dist'] },
+  // vite.config.js runs in Node during the build/dev CLI, not the browser, so
+  // it needs Node's globals (process) rather than the browser set every other
+  // source file uses.
+  {
+    files: ['vite.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
