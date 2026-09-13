@@ -38,6 +38,9 @@ export default [
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
+      // No prop-types package in this project (plain JS/JSX, no TypeScript
+      // either) - the rule has never had a way to be satisfied here.
+      'react/prop-types': 'off',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
