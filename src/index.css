@@ -1,3 +1,32 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #0a0a0a;
+}
+
+::selection {
+  background-color: rgba(99, 102, 241, 0.35);
+}
+
+/* Blanket override: stops every CSS transition/animation (including Tailwind's
+   animate-ping/animate-bounce/animate-pulse utilities used throughout the
+   redesign) for visitors who have asked the OS for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
