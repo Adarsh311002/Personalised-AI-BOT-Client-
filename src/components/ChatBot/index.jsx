@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
 import { FiSend, FiX, FiMessageSquare, FiRefreshCw } from 'react-icons/fi';
 
@@ -13,6 +13,14 @@ const GENERIC_ERROR =
 
 const RATE_LIMIT_ERROR =
   "I'm getting a lot of questions right now — please try again in a few minutes.";
+
+// Shown only in the empty-conversation state, as a starting point. Selecting
+// one fills the input - it does not send on the visitor's behalf.
+const SUGGESTED_PROMPTS = [
+  "What projects has Adarsh built?",
+  "What did he work on at DigitalSherpa.AI?",
+  "What is his GitHub?",
+];
 
 // Only ever renders text this function chose. A backend response body is never
 // shown as-is, so nothing internal can reach the visitor through an error path.
@@ -106,11 +114,17 @@ const renderMarkdown = (text) => {
   return blocks;
 };
 
-const ChatBot = ({ isOpen, onToggle }) => {
+// presetMessage is the only addition to the component's contract: an external
+// section of the page (e.g. the suggested-prompts demo) can seed the input via
+// { text, id }. The id changes on every click so the same prompt can be chosen
+// twice in a row; nothing is auto-sent, the visitor still presses send.
+const ChatBot = ({ isOpen, onToggle, presetMessage }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const messagesEndRef = useRef(null);
+  const reduceMotion = useReducedMotion();
 
   // A ref rather than state: the id is never rendered, so storing it here keeps
   // it out of the render cycle. The component stays mounted while the panel is
@@ -123,7 +137,14 @@ const ChatBot = ({ isOpen, onToggle }) => {
     if (isOpen && messages.length === 0) {
       setMessages([{ text: WELCOME_TEXT, isBot: true }]);
     }
+    if (isOpen) setHasOpenedOnce(true);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (presetMessage?.text) {
+      setInputMessage(presetMessage.text);
+    }
+  }, [presetMessage]);
 
   // The greeting is set directly rather than by clearing to an empty list: the
   // effect above only runs when isOpen changes, so clearing would leave the
@@ -136,10 +157,10 @@ const ChatBot = ({ isOpen, onToggle }) => {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(scrollToBottom, [messages, reduceMotion]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -184,91 +205,101 @@ const ChatBot = ({ isOpen, onToggle }) => {
     }
   };
 
+  const showSuggestions = messages.length <= 1 && !isLoading;
+
   return (
-    <div className="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50">
+    <div className="fixed bottom-5 right-5 z-50 sm:bottom-6 sm:right-6">
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className="w-[calc(100vw-2rem)] sm:w-96 h-[500px] max-h-[70vh] bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl flex flex-col border border-gray-700/50"
-            style={{ 
-              position: 'fixed', 
-              bottom: '5rem', 
-              right: '1rem',
-              maxWidth: 'calc(100vw - 2rem)'
-            }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            role="dialog"
+            aria-label="Mait, AI assistant"
+            className="fixed inset-0 z-50 flex flex-col bg-neutral-950/98 sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[75vh] sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/[0.08] sm:bg-neutral-950/95 sm:shadow-2xl sm:shadow-black/50 sm:backdrop-blur-xl"
           >
             {/* Header */}
-            <div className="p-4 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-2xl flex justify-between items-center">
-              <div className="flex items-center space-x-3">
-                <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                <h3 className="font-bold text-white text-sm tracking-wide">Mait Bot - Online</h3>
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold text-neutral-100">Mait</h3>
+                  <p className="text-xs text-neutral-500">Grounded in Adarsh&apos;s resume &amp; notes</p>
+                </div>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={handleReset}
                   disabled={isLoading}
                   aria-label="Start a new chat"
                   title="New chat"
-                  className="text-white hover:bg-white/20 p-1 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                 >
                   <FiRefreshCw className="h-4 w-4" />
                 </button>
                 <button
                   onClick={onToggle}
                   aria-label="Close chat"
-                  className="text-white hover:bg-white/20 p-1 rounded-lg transition-colors"
+                  className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-neutral-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                 >
                   <FiX className="h-4 w-4" />
                 </button>
               </div>
             </div>
-            
+
             {/* Messages Container */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
               {messages.map((msg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}
-                >
+                <div key={i} className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}>
                   <div
-                    className={`p-3 rounded-2xl max-w-[85%] ${
-                      msg.isBot 
-                        ? 'bg-gradient-to-r from-purple-600/90 to-blue-600/90 text-white rounded-bl-none'
-                        : 'bg-gray-800/80 text-gray-100 rounded-br-none'
-                    } backdrop-blur-sm`}
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                      msg.isBot
+                        ? 'rounded-bl-sm border border-white/[0.06] bg-white/[0.04] text-neutral-200'
+                        : 'rounded-br-sm bg-neutral-100 text-neutral-900'
+                    }`}
                   >
-                    <div className="text-sm leading-5">{renderMarkdown(msg.text)}</div>
+                    {renderMarkdown(msg.text)}
                   </div>
-                </motion.div>
+                </div>
               ))}
+
+              {showSuggestions && (
+                <div className="flex flex-col gap-2 pt-1">
+                  {SUGGESTED_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => setInputMessage(prompt)}
+                      className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-3.5 py-2.5 text-left text-[13px] text-neutral-400 transition-colors hover:border-indigo-400/30 hover:bg-indigo-500/[0.06] hover:text-neutral-100"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex justify-start"
-                >
-                  <div className="bg-gray-800/80 backdrop-blur-sm rounded-2xl p-4 max-w-[60%] rounded-bl-none">
-                    <div className="flex space-x-2 items-center">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+                <div className="flex justify-start">
+                  <div className="rounded-2xl rounded-bl-sm border border-white/[0.06] bg-white/[0.04] px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-500" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-500 [animation-delay:0.1s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-500 [animation-delay:0.2s]" />
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input Form */}
-            <form 
+            <form
               onSubmit={handleSubmit}
-              className="p-4 border-t border-gray-700/50 bg-gray-900/50 backdrop-blur-sm"
+              className="border-t border-white/[0.06] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4"
             >
               <div className="flex gap-2">
                 <input
@@ -276,15 +307,16 @@ const ChatBot = ({ isOpen, onToggle }) => {
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   placeholder="Ask about projects, skills, or experience..."
-                  className="flex-1 text-sm bg-gray-800/80 text-gray-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-400 backdrop-blur-sm"
+                  className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-neutral-100 placeholder-neutral-500 focus:border-indigo-400/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/40"
                   disabled={isLoading}
                 />
                 <button
                   type="submit"
                   disabled={isLoading || !inputMessage.trim()}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[44px]"
+                  aria-label="Send message"
+                  className="flex min-w-[44px] items-center justify-center rounded-xl bg-neutral-100 px-4 py-3 text-neutral-900 transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                 >
-                  <FiSend className="text-white h-4 w-4" />
+                  <FiSend className="h-4 w-4" />
                 </button>
               </div>
             </form>
@@ -293,28 +325,36 @@ const ChatBot = ({ isOpen, onToggle }) => {
       </AnimatePresence>
 
       {/* Floating Toggle Button */}
-      <motion.button
-        onClick={onToggle}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full shadow-2xl flex items-center justify-center relative hover:shadow-purple-500/25 transition-all duration-300"
-        aria-label={isOpen ? "Close chat" : "Open chat"}
-      >
-        {isOpen ? (
-          <FiX className="h-5 w-5 md:h-6 md:w-6 text-white" />
-        ) : (
-          <FiMessageSquare className="h-5 w-5 md:h-6 md:w-6 text-white" />
-        )}
-        
-        
-        {!isOpen && (
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-900"
-          />
-        )}
-      </motion.button>
+      <div className="relative flex items-center justify-end">
+        <AnimatePresence>
+          {!isOpen && !hasOpenedOnce && (
+            <motion.span
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ delay: 0.6, duration: 0.3 }}
+              className="mr-3 whitespace-nowrap rounded-full border border-white/10 bg-neutral-900/95 px-3 py-1.5 text-xs text-neutral-300 shadow-lg"
+            >
+              Ask me anything
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        <button
+          onClick={onToggle}
+          aria-label={isOpen ? "Close chat" : "Open chat with Mait"}
+          className="relative flex h-[52px] w-[52px] items-center justify-center rounded-full border border-white/10 bg-neutral-900 text-neutral-100 shadow-xl shadow-black/40 transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950 active:scale-95"
+        >
+          {!isOpen && !hasOpenedOnce && (
+            <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-indigo-500/30" aria-hidden="true" />
+          )}
+          {isOpen ? (
+            <FiX className="h-5 w-5" />
+          ) : (
+            <FiMessageSquare className="h-5 w-5" />
+          )}
+        </button>
+      </div>
     </div>
   );
 };
