@@ -140,6 +140,22 @@ const ChatBot = ({ isOpen, onToggle, presetMessage }) => {
     if (isOpen) setHasOpenedOnce(true);
   }, [isOpen]);
 
+  // Locks background scroll only on mobile, where the panel is a full-screen
+  // modal - the desktop floating panel is meant to leave the page scrollable
+  // behind it. Restores whatever inline overflow value was already there
+  // (rather than clearing it) so this never clobbers a style set elsewhere.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    if (!window.matchMedia('(max-width: 639px)').matches) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (presetMessage?.text) {
       setInputMessage(presetMessage.text);
@@ -218,7 +234,7 @@ const ChatBot = ({ isOpen, onToggle, presetMessage }) => {
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             role="dialog"
             aria-label="Mait, AI assistant"
-            className="fixed inset-0 z-50 flex flex-col bg-neutral-950/98 sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[75vh] sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/[0.08] sm:bg-neutral-950/95 sm:shadow-2xl sm:shadow-black/50 sm:backdrop-blur-xl"
+            className="fixed inset-0 z-50 flex flex-col bg-neutral-950/95 sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[75vh] sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/[0.08] sm:bg-neutral-950/95 sm:shadow-2xl sm:shadow-black/50 sm:backdrop-blur-xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4">
